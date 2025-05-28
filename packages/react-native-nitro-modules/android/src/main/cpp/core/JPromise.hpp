@@ -58,11 +58,40 @@ public:
 
 public:
   ~JPromise() override {
+    // Only attempt cleanup if the promise is still pending
     if (_result == nullptr && _error == nullptr) [[unlikely]] {
-      jni::ThreadScope::WithClassLoader([&]() {
-        std::runtime_error error("Timeouted: JPromise was destroyed!");
-        this->reject(jni::getJavaExceptionForCppException(std::make_exception_ptr(error)));
-      });
+      try {
+        // First check if we already have a JNI environment
+        JNIEnv* env = nullptr;
+        bool isAttached = false;
+	JavaVM* jvm;
+        jni::Environment::current()->GetJavaVM(&jvm);
+        jint status = jvm->GetEnv((void**)&env, JNI_VERSION_1_6);
+        
+        if (status == JNI_EDETACHED) {
+          // Thread is not attached, attach it temporarily
+          status = jvm->AttachCurrentThread(&env, nullptr);
+          if (status == JNI_OK) {
+            isAttached = true;
+          }
+        }
+
+        if (status == JNI_OK && env != nullptr) {
+          // Only reject if we successfully got a JNI environment
+          jni::ThreadScope::WithClassLoader([&]() {
+            std::runtime_error error("Timeouted: JPromise was destroyed!");
+            this->reject(jni::getJavaExceptionForCppException(std::make_exception_ptr(error)));
+          });
+
+          // Detach if we attached
+          if (isAttached) {
+             jvm->DetachCurrentThread();
+          }
+        }
+        // If we couldn't get a JNI environment, silently skip the rejection
+      } catch (...) {
+        // Ignore any errors during cleanup
+      }
     }
   }
 
