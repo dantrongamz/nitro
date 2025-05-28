@@ -64,7 +64,7 @@ public:
         // First check if we already have a JNI environment
         JNIEnv* env = nullptr;
         bool isAttached = false;
-	JavaVM* jvm;
+	      JavaVM* jvm;
         jni::Environment::current()->GetJavaVM(&jvm);
         jint status = jvm->GetEnv((void**)&env, JNI_VERSION_1_6);
         
