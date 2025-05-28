@@ -64,32 +64,40 @@ public:
         // First check if we already have a JNI environment
         JNIEnv* env = nullptr;
         bool isAttached = false;
-	      JavaVM* jvm;
+        JavaVM* jvm;
         jni::Environment::current()->GetJavaVM(&jvm);
         jint status = jvm->GetEnv((void**)&env, JNI_VERSION_1_6);
+        
+        __android_log_print(ANDROID_LOG_INFO, "JPromise", "Cleanup - Initial JNI status: %d", status);
         
         if (status == JNI_EDETACHED) {
           // Thread is not attached, attach it temporarily
           status = jvm->AttachCurrentThread(&env, nullptr);
+          __android_log_print(ANDROID_LOG_INFO, "JPromise", "Attaching thread - Status: %d", status);
           if (status == JNI_OK) {
             isAttached = true;
+            __android_log_print(ANDROID_LOG_INFO, "JPromise", "Successfully attached thread");
           }
         }
 
         if (status == JNI_OK && env != nullptr) {
           // Only reject if we successfully got a JNI environment
+          __android_log_print(ANDROID_LOG_INFO, "JPromise", "Attempting to reject promise");
           jni::ThreadScope::WithClassLoader([&]() {
             std::runtime_error error("Timeouted: JPromise was destroyed!");
             this->reject(jni::getJavaExceptionForCppException(std::make_exception_ptr(error)));
           });
+          __android_log_print(ANDROID_LOG_INFO, "JPromise", "Promise rejected successfully");
 
           // Detach if we attached
           if (isAttached) {
              jvm->DetachCurrentThread();
+             __android_log_print(ANDROID_LOG_INFO, "JPromise", "Thread detached");
           }
         }
         // If we couldn't get a JNI environment, silently skip the rejection
       } catch (...) {
+        __android_log_print(ANDROID_LOG_ERROR, "JPromise", "Error during cleanup");
         // Ignore any errors during cleanup
       }
     }
